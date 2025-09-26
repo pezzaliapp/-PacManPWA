@@ -173,7 +173,7 @@
 
   // ===== Entities =====
   function makeEntity(x,y,speed,color){
-    return { x, y, dir:{x:0,y:0}, sub:0, speed, color, frightened:0, dead:false, spawnX:x, spawnY:y, inHouse:false };
+    return { x, y, dir:{x:0,y:0}, sub:0, speed, color, frightened:0, dead:false, spawnX:x, spawnY:y, inHouse:false, releaseAt:0 };
   }
   const pac = makeEntity(0,0,0.11,'#ffdd00');
   let ghosts = [];
@@ -232,8 +232,10 @@
         makeEntity(s.x, s.y, GPROPS[i].speed, GPROPS[i].color),
         {name:GPROPS[i].name, bias:GPROPS[i].bias}
       );
-      g.inHouse = true;       // finché non supera il gate
-      g.dir = {x:0, y:0};     // deciso in stepGhost()
+      g.inHouse   = true;      // parte dentro
+      g.dir       = {x:0,y:0}; // fermo finché non è il suo turno
+      // MICRO-STEP #1: release scaglionato (~60 FPS => 180 frame ≈ 3s)
+      g.releaseAt = (anim|0) + [0, 180, 360, 540][i]; // 0s/3s/6s/9s
       ghosts.push(g);
     }
   }
@@ -293,15 +295,19 @@
   }
 
   function ghostDir(g){
-    // Fase release: allineati al centro del gate e poi esci verso l'alto
+    // ===== MICRO-STEP #1: fase release dalla ghost-house =====
     if (g.inHouse && gateInfo){
+      // 1) se non è il suo turno, resta fermo
+      if (g.releaseAt !== undefined && anim < g.releaseAt) return {x:0,y:0};
+
+      // 2) è il suo turno: allineati al centro del gate e poi sali
       const gx = g.x, gy = g.y, mid = gateInfo.midX, gateY = gateInfo.y;
       if (gy <= gateY-1){
         g.inHouse = false; // ha superato il gate
       } else {
         if (gx < mid && canMoveGhost(gx,gy,1,0))  return {x:1,y:0};   // vai dx verso mid
         if (gx > mid && canMoveGhost(gx,gy,-1,0)) return {x:-1,y:0};  // vai sx verso mid
-        if (canMoveGhost(gx,gy,0,-1)) return {x:0,y:-1};              // sali ed esci
+        if (canMoveGhost(gx,gy,0,-1)) return {x:0,y:-1};              // poi su ed esci
         const alt = [{x:0, y:1},{x:1, y:0},{x:-1,y:0}].filter(d=>canMoveGhost(gx,gy,d.x,d.y));
         if (alt.length) return alt[0];
         return {x:0,y:0};
@@ -441,7 +447,9 @@
       if (Math.abs(gx - pac.x) + Math.abs(gy - pac.y) <= 0){
         if (g.frightened>0){
           S.score += 200;
-          g.x=g.spawnX; g.y=g.spawnY; g.frightened=0; g.sub=0; g.dir={x:0,y:0}; g.inHouse=true;
+          // MICRO-STEP #1: respawn dentro casa e release dopo ~3s
+          g.x=g.spawnX; g.y=g.spawnY; g.sub=0; g.dir={x:0,y:0};
+          g.frightened=0; g.inHouse=true; g.releaseAt = (anim|0) + 180;
           toast('Ghost! +200');
           updateHUD();
         }else{
