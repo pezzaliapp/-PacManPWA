@@ -43,67 +43,22 @@
   function k(x,y){ return `${x},${y}`; }
 
   async function loadMaze(){
-    let txt = '';
-    try {
-      const r = await fetch('maze.txt', { cache: 'no-store' });
-      if (!r.ok) throw new Error('maze.txt HTTP ' + r.status);
-      txt = await r.text();
-    } catch (e) {
-      console.warn('maze.txt load failed, using DEFAULT_MAZE', e);
-      txt = `############################
-#............##............#
-#.####.#####.##.#####.####.#
-#X####.#####.##.#####.####X#
-#..........................#
-#.####.##.########.##.####.#
-#......##....##....##......#
-######.##### ## #####.######
-     #.##          ##.#
-     #.## ###--### ##.#
-######.## # GGGG # ##.######
-      .   # GGGG #   .      
-######.## # GGGG # ##.######
-     #.## ######## ##.#
-     #.##    P     ##.#     
-######.## ######## ##.######
-#............##............#
-#.####.#####.##.#####.####.#
-#X..##................##..X#
-###.##.##.########.##.##.###
-#......##....##....##......#
-#.##########.##.##########.#
-#..........................#
-############################
-`;
-      toast('Maze fallback', 1200);
-    }
-    rows = txt.replace(//g,'').split('
-').filter(line=>line.length>0);
+    const txt = await fetch('maze.txt').then(r=>r.text());
+    rows = txt.replace(/\r/g,'').split('\n').filter(Boolean);
+    // normalize width
     W = Math.max(...rows.map(r=>r.length));
     rows = rows.map(r=> r.padEnd(W, ' '));
     H = rows.length;
 
+    // scan
     pellets = [];
     gates = new Set();
     tunnels = new Set();
     ghostStarts = [];
-    pacStart = {x:1,y:1};
-
-    for (let y=0;y<H;y++){ for (let x=0;x<W;x++){ const c = rows[y][x];
-      if (c===PAC){ pacStart={x,y}; }
-      else if (c===GHOST){ ghostStarts.push({x,y}); }
-      else if (c==='.'){ pellets.push({x,y,power:false,eaten:false}); }
-      else if (c==='o'){ pellets.push({x,y,power:true,eaten:false}); }
-      else if (c==='-'){ gates.add(k(x,y)); }
-      else if (c==='X'){ tunnels.add(k(x,y)); }
-    }}
-
-    if (ghostStarts.length===0){ ghostStarts.push({x: pacStart.x, y: pacStart.y-2}); }
-    if (!pellets.some(p=>p.power)){ // ensure at least four power-pellet candidates
-      const corners = [{x:1,y:1},{x:W-2,y:1},{x:1,y:H-2},{x:W-2,y:H-2}];
-      for (const c of corners){ const p = pellets.find(p=>p.x===c.x && p.y===c.y); if (p) p.power=true; }
-    }
-  }; }
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        const c = rows[y][x];
+        if (c===PAC){ pacStart={x,y}; }
         else if (c===GHOST){ ghostStarts.push({x,y}); }
         else if (c===DOT){ pellets.push({x,y,power:false,eaten:false}); }
         else if (c===POWER){ pellets.push({x,y,power:true,eaten:false}); }
@@ -239,17 +194,11 @@
   }
 
   function stepEntity(e, canMove){
-    // Move forward, do not use player intent here.
-    if (!canMove(e.x,e.y,e.dir.x,e.dir.y)){
-      e.dir = {x:0,y:0};
-    }
-    e.sub += e.speed;
-    if (e.sub>=1){
-      e.x += e.dir.x; e.y += e.dir.y; e.sub=0;
-      const w = wrap(e.x,e.y);
-      e.x=w.x; e.y=w.y;
-    }
-  };
+    // Turn if possible at tile
+    if (e.sub<=0){
+      if (intent.x||intent.y){
+        if (canMove(e.x,e.y,intent.x,intent.y)){
+          e.dir={x:intent.x,y:intent.y};
         }
       }
       if (!canMove(e.x,e.y,e.dir.x,e.dir.y)){
@@ -265,44 +214,15 @@
   }
 
   function stepPac(){
-    // Turn on tile center if possible
-    if (pac.sub<=0){
-      if (intent.x||intent.y){
-        if (canMovePac(pac.x,pac.y,intent.x,intent.y)){
-          pac.dir = {x:intent.x, y:intent.y};
-        }
-      }
-      if (!canMovePac(pac.x,pac.y,pac.dir.x,pac.dir.y)){
-        pac.dir = {x:0,y:0};
-      }
-    }
-    // Move
-    pac.sub += pac.speed;
-    if (pac.sub>=1){
-      pac.x += pac.dir.x; pac.y += pac.dir.y; pac.sub=0;
-      const w = wrap(pac.x,pac.y);
-      pac.x=w.x; pac.y=w.y;
-    }
-    // Eat
+    stepEntity(pac, canMovePac);
     const p = pelletAt(pac.x,pac.y);
     if (p && !p.eaten){
       p.eaten=true;
-      const add = p.power ? 50 : 10;
-      S.score += add;
+      S.score += p.power ? 50 : 10;
       if (p.power){
         ghosts.forEach(g=> g.frightened = 6 + (S.level-1));
-        toast('Power-pill!');
+        toast('Power‑pill!');
       }
-      updateHUD();
-      if (pellets.every(p=>p.eaten)){
-        S.level++;
-        pellets.forEach(p=> p.eaten=false);
-        resetPositions();
-        toast(`Livello ${S.level}`);
-        updateHUD();
-      }
-    }
-  }
       updateHUD();
       if (pellets.every(p=>p.eaten)){
         S.level++;
@@ -351,9 +271,6 @@
       const nd = ghostDir(g);
       if (nd.x||nd.y) g.dir=nd;
     }
-    stepEntity(g, canMoveGhost);
-    if (g.frightened>0) g.frightened -= 0.02;
-  }
     stepEntity(g, canMoveGhost);
     if (g.frightened>0) g.frightened -= 0.02;
   }
@@ -444,27 +361,12 @@
 
   function collide(){
     for (const g of ghosts){
-      if (g.x===pac.x && g.y===pac.y){
+      const gx = g.x + (g.sub>0.5? g.dir.x:0);
+      const gy = g.y + (g.sub>0.5? g.dir.y:0);
+      if (Math.abs(gx - pac.x) + Math.abs(gy - pac.y) <= 0){
         if (g.frightened>0){
           S.score += 200;
           g.x=g.spawnX; g.y=g.spawnY; g.frightened=0; g.sub=0; g.dir={x:0,y:0};
-          toast('Ghost! +200');
-          updateHUD();
-        }else{
-          S.lives--;
-          updateHUD();
-          if (S.lives<=0){
-            S.over=true; S.paused=true;
-            toast('Game Over', 2000);
-          }else{
-            toast('Oops! -1 vita', 1000);
-            resetPositions();
-          }
-        }
-        break;
-      }
-    }
-  };
           toast('Ghost! +200');
           updateHUD();
         }else{
@@ -492,16 +394,12 @@
       collide();
       anim++;
     }
+    // draw
     computeScale();
     fitHiDPI();
     drawMaze();
     drawPac();
     for (const g of ghosts) drawGhost(g);
-    if (W===0 || H===0){
-      ctx.fillStyle = '#f55';
-      ctx.font = '16px system-ui';
-      ctx.fillText('Maze non caricato (W/H=0). Controlla maze.txt.', 10, 24);
-    }
     requestAnimationFrame(tick);
   }
 
