@@ -113,17 +113,17 @@
     return c === WALLCH;
   }
 
-  // Pac può attraversare il gate '-'
+  // Pac NON attraversa il gate '-'
   function passableForPac(x,y){
     if (x<0||y<0||y>=H||x>=W) return false;
-    if (gates.has(k(x,y))) return true;
+    if (gates.has(k(x,y))) return false;   // blocco il gate a Pac
     return !isWall(x,y);
   }
 
-  // I fantasmi NON passano il gate
+  // I fantasmi POSSONO attraversare il gate
   function passableForGhost(x,y){
     if (x<0||y<0||y>=H||x>=W) return false;
-    if (gates.has(k(x,y))) return false;
+    if (gates.has(k(x,y))) return true;    // i fantasmi escono dalla casa
     return !isWall(x,y);
   }
 
@@ -215,7 +215,11 @@
     ];
     for (let i=0;i<Math.min(4, Math.max(1, ghostStarts.length)); i++){
       const s = ghostStarts[i] || pacStart;
-      const g = Object.assign(makeEntity(s.x, s.y, GPROPS[i].speed, GPROPS[i].color), {name:GPROPS[i].name, bias:GPROPS[i].bias});
+      const g = Object.assign(
+        makeEntity(s.x, s.y, GPROPS[i].speed, GPROPS[i].color),
+        {name:GPROPS[i].name, bias:GPROPS[i].bias}
+      );
+      g.dir = {x:0, y:-1}; // spinta iniziale verso il gate
       ghosts.push(g);
     }
   }
@@ -335,7 +339,7 @@
         const ch = rows[y][x];
         const X = offsetX + x*TILE;
         const Y = offsetY + y*TILE;
-        if (ch===WALLCH){               // <-- SOLO # sono muri
+        if (ch===WALLCH){               // SOLO # sono muri
           ctx.fillStyle = '#0b2b99';
           ctx.fillRect(X, Y, TILE, TILE);
           ctx.fillStyle = '#133bbb';
