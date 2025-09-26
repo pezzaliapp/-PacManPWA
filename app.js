@@ -108,7 +108,7 @@
         .forEach(c=>{ const p = pellets.find(p=>p.x===c.x && p.y===c.y); if (p) p.power = true; });
     }
 
-    // Calcola info del gate (assumiamo un’unica riga di '-')
+    // Calcola info del gate (assumiamo una singola riga di '-')
     if (gates.size){
       const coords = [...gates].map(s=>s.split(',').map(Number));
       const y = coords[0][1];
@@ -233,7 +233,7 @@
         {name:GPROPS[i].name, bias:GPROPS[i].bias}
       );
       g.inHouse = true;       // finché non supera il gate
-      g.dir = {x:0, y:0};     // verrà deciso in stepGhost()
+      g.dir = {x:0, y:0};     // deciso in stepGhost()
       ghosts.push(g);
     }
   }
@@ -297,11 +297,191 @@
     if (g.inHouse && gateInfo){
       const gx = g.x, gy = g.y, mid = gateInfo.midX, gateY = gateInfo.y;
       if (gy <= gateY-1){
-        // ha superato il gate
-        g.inHouse = false;
+        g.inHouse = false; // ha superato il gate
       } else {
-        if (gx < mid && canMoveGhost(gx,gy,1,0))  return {x:1,y:0};   // vai verso dx
-        if (gx > mid && canMoveGhost(gx,gy,-1,0)) return {x:-1,y:0};  // vai verso sx
-        if (canMoveGhost(gx,gy,0,-1)) return {x:0,y:-1};              // poi su attraverso il gate
-        // fallback: prova altre direzioni percorribili per non restare fermo
-        const alt = [{x:0
+        if (gx < mid && canMoveGhost(gx,gy,1,0))  return {x:1,y:0};   // vai dx verso mid
+        if (gx > mid && canMoveGhost(gx,gy,-1,0)) return {x:-1,y:0};  // vai sx verso mid
+        if (canMoveGhost(gx,gy,0,-1)) return {x:0,y:-1};              // sali ed esci
+        const alt = [{x:0, y:1},{x:1, y:0},{x:-1,y:0}].filter(d=>canMoveGhost(gx,gy,d.x,d.y));
+        if (alt.length) return alt[0];
+        return {x:0,y:0};
+      }
+    }
+
+    // frightened: random
+    if (g.frightened>0){
+      const dirs = [{x:1,y:0},{x:-1,y:0},{x:0, y:1},{x:0, y:-1}]
+        .filter(d=> canMoveGhost(g.x,g.y,d.x,d.y) && !(d.x===-g.dir.x && d.y===-g.dir.y));
+      if (dirs.length===0) return {x:0,y:0};
+      return dirs[Math.floor(Math.random()*dirs.length)];
+    }
+    // greedy verso Pac (con variazioni)
+    const dirs = [{x:1,y:0},{x:-1,y:0},{x:0, y:1},{x:0, y:-1}]
+      .filter(d=> canMoveGhost(g.x,g.y,d.x,d.y) && !(d.x===-g.dir.x && d.y===-g.dir.y));
+    if (dirs.length===0) return {x:0,y:0};
+    let tx=pac.x, ty=pac.y;
+    if (g.name==='Pinky'){ tx+=2*pac.dir.x; ty+=2*pac.dir.y; }
+    if (g.name==='Inky'){
+      const bl = ghosts[0]||g;
+      tx = Math.round((bl.x+pac.x)/2);
+      ty = Math.round((bl.y+pac.y)/2);
+    }
+    if (g.name==='Clyde'){
+      const dist = Math.abs(g.x-pac.x)+Math.abs(g.y-pac.y);
+      if (dist<6){ tx=1; ty=H-2; }
+    }
+    let best=dirs[0], bestScore=Infinity;
+    for (const d of dirs){
+      const nx=g.x+d.x, ny=g.y+d.y;
+      const sc = Math.hypot(nx-tx, ny-ty) * (1 - 0.15*g.bias);
+      if (sc<bestScore){ bestScore=sc; best=d; }
+    }
+    return best;
+  }
+
+  function stepGhost(g){
+    if (g.sub<=0){
+      const nd = ghostDir(g);
+      if (nd.x||nd.y) g.dir=nd;
+    }
+    stepEntity(g, canMoveGhost);
+    if (g.frightened>0) g.frightened -= 0.02;
+  }
+
+  // ===== Rendering =====
+  let TILE = 20, offsetX=0, offsetY=0;
+  function computeScale(){
+    TILE = Math.min(
+      Math.floor(cvs.clientWidth  / Math.max(1,W)),
+      Math.floor(cvs.clientHeight / Math.max(1,H))
+    );
+    if (TILE<10) TILE=10;
+    offsetX = Math.floor((cvs.clientWidth  - W*TILE)/2);
+    offsetY = Math.floor((cvs.clientHeight - H*TILE)/2);
+  }
+
+  function drawMaze(){
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,cvs.clientWidth, cvs.clientHeight);
+    for (let y=0;y<H;y++){
+      for (let x=0;x<W;x++){
+        const ch = rows[y][x];
+        const X = offsetX + x*TILE;
+        const Y = offsetY + y*TILE;
+        if (ch===WALLCH){               // SOLO # sono muri
+          ctx.fillStyle = '#0b2b99';
+          ctx.fillRect(X, Y, TILE, TILE);
+          ctx.fillStyle = '#133bbb';
+          ctx.fillRect(X+2, Y+2, TILE-4, TILE-4);
+        }
+      }
+    }
+    // pellets
+    for (const p of pellets){
+      if (p.eaten) continue;
+      const X = offsetX + p.x*TILE + TILE/2;
+      const Y = offsetY + p.y*TILE + TILE/2;
+      ctx.fillStyle = p.power ? '#9df' : '#ffd';
+      const r = p.power ? TILE*0.18 : TILE*0.10;
+      ctx.beginPath();
+      ctx.arc(X,Y,r,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  let anim = 0;
+  function drawPac(){
+    const X = offsetX + (pac.x + pac.sub*pac.dir.x)*TILE + TILE/2;
+    const Y = offsetY + (pac.y + pac.sub*pac.dir.y)*TILE + TILE/2;
+    const mouth = (Math.sin(anim*0.25)+1)/2 * 0.6 + 0.2;
+    let angle=0;
+    if (pac.dir.x===1) angle=0;
+    else if (pac.dir.x===-1) angle=Math.PI;
+    else if (pac.dir.y===1) angle=Math.PI/2;
+    else if (pac.dir.y===-1) angle=-Math.PI/2;
+    ctx.fillStyle = '#ffdd00';
+    ctx.beginPath();
+    ctx.moveTo(X,Y);
+    ctx.arc(X,Y,TILE*0.45, angle+mouth, angle+Math.PI*2-mouth);
+    ctx.closePath();
+    ctx.fill();
+    // eye
+    ctx.fillStyle='#000';
+    ctx.beginPath();
+    ctx.arc(X + Math.cos(angle-Math.PI/2)*TILE*0.15, Y + Math.sin(angle-Math.PI/2)*TILE*0.15, TILE*0.06, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawGhost(g){
+    const X = offsetX + (g.x + g.sub*g.dir.x)*TILE + TILE/2;
+    const Y = offsetY + (g.y + g.sub*g.dir.y)*TILE + TILE/2;
+    ctx.fillStyle = g.frightened>0 ? '#2fd3ff' : g.color;
+    // body
+    ctx.beginPath();
+    ctx.arc(X, Y, TILE*0.45, Math.PI, 0);
+    ctx.lineTo(X+TILE*0.45, Y+TILE*0.4);
+    for (let i=0;i<4;i++){
+      ctx.lineTo(X+TILE*0.45 - i*TILE*0.3, Y+TILE*0.45);
+      ctx.lineTo(X+TILE*0.30 - i*TILE*0.3, Y+TILE*0.35);
+    }
+    ctx.closePath(); ctx.fill();
+    // eyes
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(X-TILE*0.15,Y-TILE*0.1,TILE*0.12,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(X+TILE*0.15,Y-TILE*0.1,TILE*0.12,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.arc(X-TILE*0.12 + g.dir.x*TILE*0.05,Y-TILE*0.1 + g.dir.y*TILE*0.05,TILE*0.06,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(X+TILE*0.18 + g.dir.x*TILE*0.05,Y-TILE*0.1 + g.dir.y*TILE*0.05,TILE*0.06,0,Math.PI*2); ctx.fill();
+  }
+
+  function collide(){
+    for (const g of ghosts){
+      const gx = g.x + (g.sub>0.5? g.dir.x:0);
+      const gy = g.y + (g.sub>0.5? g.dir.y:0);
+      if (Math.abs(gx - pac.x) + Math.abs(gy - pac.y) <= 0){
+        if (g.frightened>0){
+          S.score += 200;
+          g.x=g.spawnX; g.y=g.spawnY; g.frightened=0; g.sub=0; g.dir={x:0,y:0}; g.inHouse=true;
+          toast('Ghost! +200');
+          updateHUD();
+        }else{
+          S.lives--;
+          updateHUD();
+          if (S.lives<=0){
+            S.over=true; S.paused=true;
+            toast('Game Over', 2000);
+          }else{
+            toast('Oops! -1 vita', 1000);
+            resetPositions();
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // ===== Main loop =====
+  function tick(){
+    if (!S.paused && !S.over){
+      stepPac();
+      for (const g of ghosts) stepGhost(g);
+      collide();
+      anim++;
+    }
+    computeScale();
+    fitHiDPI();
+    drawMaze();
+    drawPac();
+    for (const g of ghosts) drawGhost(g);
+    requestAnimationFrame(tick);
+  }
+
+  // ===== Boot =====
+  (async function init(){
+    try { await loadMaze(); } catch(e){ console.error(e); }
+    updateHUD();
+    resetPositions();
+    requestAnimationFrame(tick);
+  })();
+
+})();
