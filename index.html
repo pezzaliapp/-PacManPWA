@@ -12,10 +12,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <style>
     :root{
-      --bg:#0b0b0b; --ink:#f0f0f0; --wall:#0b2b99; --wall2:#133bbb; --pellet:#ffd; --pp:#9df; --hud:#151515; --btn:#1b1b1b;
+      --bg:#0b0b0b; --ink:#f0f0f0; --wall:#0b2b99; --wall2:#133bbb; 
+      --pellet:#ffd; --pp:#9df; --hud:#151515; --btn:#1b1b1b;
     }
     *{box-sizing:border-box}
-    html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial}
 
     /* Header & HUD */
     header{padding:10px 14px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #111;
@@ -35,17 +37,13 @@
     button{flex:1; background:var(--btn); color:var(--ink); padding:12px 14px; border-radius:12px; border:1px solid #111; font-weight:600; letter-spacing:.3px}
     button:active{transform:translateY(1px)}
 
-    /* ===== iPhone-friendly D-Pad overlay ===== */
+    /* ===== D-Pad fisso e trasparente ===== */
     #dpad{
       position:absolute; left:0; right:0; bottom:8px;
       display:flex; justify-content:center;
+      opacity:.25;                          /* sempre visibile */
       pointer-events:none;
-      opacity:.14;                          /* attenuato di default */
-      transition:opacity .18s ease;
     }
-    #dpad.show{opacity:.95}
-    #dpad.hide{opacity:.10}
-
     .pad{pointer-events:auto; width:min(340px,70%); height:132px; display:grid;
       grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px}
     .pad button{
@@ -61,7 +59,7 @@
     .pad button:active{transform:translateY(1px); background:rgba(30,30,30,.55)}
     .pad .empty{background:transparent; border:none}
 
-    /* Desktop: D-Pad nascosto completamente */
+    /* Desktop: D-Pad nascosto */
     @media (hover:hover) and (pointer:fine){
       #dpad{display:none}
     }
@@ -88,8 +86,8 @@
     <div id="gamePanel">
       <canvas id="game" width="560" height="620" aria-label="Pac-Man"></canvas>
 
-      <!-- D-Pad sovrapposto (mobile) -->
-      <div id="dpad" class="hide">
+      <!-- D-Pad sempre visibile (mobile) -->
+      <div id="dpad">
         <div class="pad">
           <div class="empty"></div>
           <button id="btnUp" aria-label="Su">▲</button>
@@ -121,35 +119,11 @@
 
   <script src="app.js"></script>
   <script>
-    // SW
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js');
       });
     }
-
-    // Auto-hide/Show D-Pad (funziona anche se non modifichi app.js)
-    (function(){
-      const dpad = document.getElementById('dpad');
-      const panel = document.getElementById('gamePanel');
-      const cvs = document.getElementById('game');
-      let to;
-      function bump(){
-        if(!dpad) return;
-        dpad.classList.add('show');
-        dpad.classList.remove('hide');
-        clearTimeout(to);
-        to = setTimeout(()=>{ dpad.classList.remove('show'); dpad.classList.add('hide'); }, 1500);
-      }
-      // Mostra quando tocchi o premi tasti freccia
-      panel.addEventListener('touchstart', bump, {passive:true});
-      cvs.addEventListener('touchstart', bump, {passive:true});
-      window.addEventListener('keydown', (e)=>{
-        if (e.key && e.key.toLowerCase().startsWith('arrow')) bump();
-      }, {passive:true});
-      // Parte attenuato
-      dpad.classList.add('hide');
-    })();
   </script>
 </body>
 </html>
