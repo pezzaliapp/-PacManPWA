@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <style>
     :root{
-      --bg:#0b0b0b; --ink:#f0f0f0; --wall:#0b2b99; --wall2:#133bbb; 
+      --bg:#0b0b0b; --ink:#f0f0f0; --wall:#0b2b99; --wall2:#133bbb;
       --pellet:#ffd; --pp:#9df; --hud:#151515; --btn:#1b1b1b;
     }
     *{box-sizing:border-box}
@@ -37,31 +37,39 @@
     button{flex:1; background:var(--btn); color:var(--ink); padding:12px 14px; border-radius:12px; border:1px solid #111; font-weight:600; letter-spacing:.3px}
     button:active{transform:translateY(1px)}
 
-    /* ===== D-Pad fisso e trasparente ===== */
-    #dpad{
-      position:absolute; left:0; right:0; bottom:8px;
-      display:flex; justify-content:center;
-      opacity:.25;                          /* sempre visibile */
-      pointer-events:none;
+    /* ===== Fascia Touch-Pad (mobile) ===== */
+    #touchPad{
+      width:100%;
+      max-width:920px;
+      height:132px;
+      margin:8px auto 0;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      grid-template-rows:repeat(2,1fr);
+      gap:10px;
+      touch-action:manipulation;
     }
-    .pad{pointer-events:auto; width:min(340px,70%); height:132px; display:grid;
-      grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px}
-    .pad button{
-      min-height:36px;
+    #touchPad .zone{
       background:rgba(20,20,20,.35);
       border:1px solid rgba(255,255,255,.22);
       color:rgba(255,255,255,.95);
-      border-radius:12px;
+      border-radius:14px;
       backdrop-filter:blur(6px) saturate(120%);
       -webkit-backdrop-filter:blur(6px) saturate(120%);
       font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+      user-select:none;
     }
-    .pad button:active{transform:translateY(1px); background:rgba(30,30,30,.55)}
-    .pad .empty{background:transparent; border:none}
+    #touchPad .zone:active{background:rgba(30,30,30,.55)}
+    /* Posizione delle 4 zone stile D-Pad */
+    #btnUp   { grid-column:2; grid-row:1 }
+    #btnLeft { grid-column:1; grid-row:2 }
+    #btnDown { grid-column:2; grid-row:2 }
+    #btnRight{ grid-column:3; grid-row:2 }
 
-    /* Desktop: D-Pad nascosto */
+    /* Desktop: nascondi la fascia touch */
     @media (hover:hover) and (pointer:fine){
-      #dpad{display:none}
+      #touchPad{ display:none }
     }
 
     footer{padding:10px; text-align:center; color:#888; font-size:12px}
@@ -85,21 +93,14 @@
   <div id="wrap">
     <div id="gamePanel">
       <canvas id="game" width="560" height="620" aria-label="Pac-Man"></canvas>
+    </div>
 
-      <!-- D-Pad sempre visibile (mobile) -->
-      <div id="dpad">
-        <div class="pad">
-          <div class="empty"></div>
-          <button id="btnUp" aria-label="Su">▲</button>
-          <div class="empty"></div>
-          <button id="btnLeft" aria-label="Sinistra">◀</button>
-          <div class="empty"></div>
-          <button id="btnRight" aria-label="Destra">▶</button>
-          <div class="empty"></div>
-          <button id="btnDown" aria-label="Giù">▼</button>
-          <div class="empty"></div>
-        </div>
-      </div>
+    <!-- Fascia Touch-Pad: usa gli stessi ID che ascolta app.js -->
+    <div id="touchPad" aria-label="Touch pad direzionale">
+      <button id="btnUp"    class="zone" aria-label="Su">▲</button>
+      <button id="btnLeft"  class="zone" aria-label="Sinistra">◀</button>
+      <button id="btnDown"  class="zone" aria-label="Giù">▼</button>
+      <button id="btnRight" class="zone" aria-label="Destra">▶</button>
     </div>
 
     <div id="controls">
@@ -108,7 +109,7 @@
         <button id="btnRestart">⟲ Restart</button>
       </div>
       <div class="row">
-        <span class="badge">⌨️ Frecce/WSAD • 📱 D-Pad</span>
+        <span class="badge">⌨️ Frecce/WSAD • 📱 Touch-Pad</span>
         <span class="badge">🍒 Power-pill = fantasmi spaventati</span>
       </div>
       <p class="legend">© 2025 Pac-Man — Una PWA di pezzaliAPP.com • MIT</p>
