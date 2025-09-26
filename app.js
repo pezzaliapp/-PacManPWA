@@ -1,4 +1,4 @@
-// Pac‑Man PWA — v1 (MIT) — by pezzaliAPP
+// Pac-Man PWA — v1 (MIT) — by pezzaliAPP
 (()=>{
   'use strict';
 
@@ -22,86 +22,121 @@
   }
   window.addEventListener('resize', fitHiDPI);
 
-  // ===== Load maze.txt =====
+  // ===== Maze / Tiles =====
   let rows = [];
-  let H=0,W=0;
+  let H=0, W=0;
   let pacStart = {x:1,y:1};
   let ghostStarts = [];
-  let pellets = []; // {x,y,power,eaten:false}
-  let gates = new Set(); // positions of '-' (string key "x,y")
-  let tunnels = new Set(); // 'X'
+  let pellets = [];            // {x,y,power,eaten:false}
+  let gates = new Set();       // '-'  (string key "x,y")
+  let tunnels = new Set();     // 'X'
 
-  const WALLCH='#';
-  const EMPTYCH=' ';
-  const DOT='.';
-  const POWER='o';
-  const GHOST='G';
-  const PAC='P';
-  const TUN='X';
-  const GATE='-';
+  const WALLCH = '#';
+  const DOT    = '.';
+  const POWER  = 'o';
+  const GHOST  = 'G';
+  const PAC    = 'P';
+  const TUN    = 'X';
+  const GATE   = '-';
 
-  function k(x,y){ return `${x},${y}`; }
+  const FALLBACK_MAZE = `############################
+#............##............#
+#.####.#####.##.#####.####.#
+#X####.#####.##.#####.####X#
+#..........................#
+#.####.##.########.##.####.#
+#......##....##....##......#
+######.##### ## #####.######
+     #.##          ##.#
+     #.## ###--### ##.#
+######.## # GGGG # ##.######
+      .   # GGGG #   .      
+######.## # GGGG # ##.######
+     #.## ######## ##.#
+     #.##    P     ##.#     
+######.## ######## ##.######
+#............##............#
+#.####.#####.##.#####.####.#
+#X..##................##..X#
+###.##.##.########.##.##.###
+#......##....##....##......#
+#.##########.##.##########.#
+#..........................#
+############################`;
 
+  const k = (x,y)=>`${x},${y}`;
+
+  // Carica maze.txt con fallback integrato
   async function loadMaze(){
-    const txt = await fetch('maze.txt').then(r=>r.text());
+    let txt = '';
+    try{
+      const r = await fetch('maze.txt', {cache:'no-store'});
+      if(!r.ok) throw new Error('maze.txt HTTP '+r.status);
+      txt = await r.text();
+    }catch(err){
+      console.warn('maze.txt load failed, using fallback', err);
+      txt = FALLBACK_MAZE;
+    }
+
     rows = txt.replace(/\r/g,'').split('\n').filter(Boolean);
-    // normalize width
     W = Math.max(...rows.map(r=>r.length));
     rows = rows.map(r=> r.padEnd(W, ' '));
     H = rows.length;
 
-    // scan
     pellets = [];
     gates = new Set();
     tunnels = new Set();
     ghostStarts = [];
+    pacStart = {x:1,y:1};
+
     for (let y=0;y<H;y++){
       for (let x=0;x<W;x++){
         const c = rows[y][x];
-        if (c===PAC){ pacStart={x,y}; }
-        else if (c===GHOST){ ghostStarts.push({x,y}); }
-        else if (c===DOT){ pellets.push({x,y,power:false,eaten:false}); }
-        else if (c===POWER){ pellets.push({x,y,power:true,eaten:false}); }
-        else if (c===GATE){ gates.add(k(x,y)); }
-        else if (c===TUN){ tunnels.add(k(x,y)); }
+        if (c===PAC)    pacStart = {x,y};
+        else if (c===GHOST) ghostStarts.push({x,y});
+        else if (c===DOT)   pellets.push({x,y,power:false,eaten:false});
+        else if (c===POWER) pellets.push({x,y,power:true, eaten:false});
+        else if (c===GATE)  gates.add(k(x,y));
+        else if (c===TUN)   tunnels.add(k(x,y));
       }
     }
-
-    // if no power pellets in file, add four corners as power where there are dots
-    const candidates = [
-      {x:1,y:1},{x:W-2,y:1},{x:1,y:H-2},{x:W-2,y:H-2}
-    ];
-    const repl = [];
-    for (const c of candidates){
-      const p = pellets.find(p=>p.x===c.x && p.y===c.y);
-      if (p){ p.power=true; }
+    // Assicura almeno qualche power-pill
+    if (!pellets.some(p=>p.power)){
+      [{x:1,y:1},{x:W-2,y:1},{x:1,y:H-2},{x:W-2,y:H-2}]
+        .forEach(c=>{ const p = pellets.find(p=>p.x===c.x && p.y===c.y); if (p) p.power = true; });
     }
   }
 
+  // Solo '#' sono muri
   function isWall(x,y){
     const c = (rows[y]||'')[x]||' ';
-    return c===WALLCH || c===EMPTYCH || gates.has(k(x,y));
+    return c === WALLCH;
   }
+
+  // Pac può attraversare il gate '-'
   function passableForPac(x,y){
-    const c = (rows[y]||'')[x]||' ';
+    if (x<0||y<0||y>=H||x>=W) return false;
+    if (gates.has(k(x,y))) return true;
+    return !isWall(x,y);
+  }
+
+  // I fantasmi NON passano il gate
+  function passableForGhost(x,y){
+    if (x<0||y<0||y>=H||x>=W) return false;
     if (gates.has(k(x,y))) return false;
     return !isWall(x,y);
   }
-  function passableForGhost(x,y){
-    const c = (rows[y]||'')[x]||' ';
-    if (c===GHOST || c===EMPTYCH) return true;
-    if (gates.has(k(x,y))) return false; // keep simple
-    return !isWall(x,y);
-  }
+
   function pelletAt(x,y){
     return pellets.find(p=>p.x===x && p.y===y && !p.eaten);
   }
+
   function wrap(x,y){
+    // Teletrasporto su 'X' allo stesso y
     if (tunnels.has(k(x,y))){
-      // teleport to the opposite tunnel with same y
       for (const t of tunnels){
         const [tx,ty] = t.split(',').map(Number);
-        if (ty===y && tx!==x){ return {x:tx,y:ty}; }
+        if (ty===y && tx!==x) return {x:tx,y:ty};
       }
     }
     if (x<0) x=W-1;
@@ -111,11 +146,11 @@
 
   // ===== Game state =====
   const S = { score:0, lives:3, level:1, paused:false, over:false };
-  function updateHUD(){
+  const updateHUD = ()=>{
     scoreEl.textContent = S.score;
     livesEl.textContent = S.lives;
     levelEl.textContent = S.level;
-  }
+  };
   function toast(msg, ms=1000){
     toastEl.textContent = msg;
     toastEl.style.display='block';
@@ -123,15 +158,16 @@
     toastEl._t = setTimeout(()=> toastEl.style.display='none', ms);
   }
 
-  // Entities
+  // ===== Entities =====
   function makeEntity(x,y,speed,color){
     return { x, y, dir:{x:0,y:0}, sub:0, speed, color, frightened:0, dead:false, spawnX:x, spawnY:y };
   }
   const pac = makeEntity(0,0,0.11,'#ffdd00');
   let ghosts = [];
 
+  // Input intent (solo Pac lo usa)
   let intent = {x:0,y:0};
-  function setIntent(x,y){ intent={x,y}; }
+  const setIntent = (x,y)=>{ intent = {x,y}; };
 
   // Input
   window.addEventListener('keydown', (e)=>{
@@ -140,15 +176,16 @@
     else if (k==='arrowdown' || k==='s') setIntent(0,1);
     else if (k==='arrowleft' || k==='a') setIntent(-1,0);
     else if (k==='arrowright' || k==='d') setIntent(1,0);
-    else if (k===' '){ togglePause(); }
+    else if (k===' ') togglePause();
   });
   [['btnUp',0,-1],['btnDown',0,1],['btnLeft',-1,0],['btnRight',1,0]].forEach(([id,dx,dy])=>{
     const el = document.getElementById(id);
     const on = (ev)=>{ ev.preventDefault(); setIntent(dx,dy); };
     el.addEventListener('touchstart', on, {passive:false});
-    el.addEventListener('touchend', on, {passive:false});
+    el.addEventListener('touchend', on,   {passive:false});
     el.addEventListener('click', on);
   });
+
   btnPlayPause.addEventListener('click', ()=> togglePause());
   btnRestart.addEventListener('click', ()=> restart());
 
@@ -183,28 +220,13 @@
     }
   }
 
-  // Movement helpers
-  function canMovePac(x,y,dx,dy){
-    const nx=x+dx, ny=y+dy;
-    return passableForPac(nx,ny);
-  }
-  function canMoveGhost(x,y,dx,dy){
-    const nx=x+dx, ny=y+dy;
-    return passableForGhost(nx,ny);
-  }
+  // ===== Movement helpers =====
+  const canMovePac   = (x,y,dx,dy)=> passableForPac(x+dx, y+dy);
+  const canMoveGhost = (x,y,dx,dy)=> passableForGhost(x+dx, y+dy);
 
+  // stepEntity “muto” (non legge intent)
   function stepEntity(e, canMove){
-    // Turn if possible at tile
-    if (e.sub<=0){
-      if (intent.x||intent.y){
-        if (canMove(e.x,e.y,intent.x,intent.y)){
-          e.dir={x:intent.x,y:intent.y};
-        }
-      }
-      if (!canMove(e.x,e.y,e.dir.x,e.dir.y)){
-        e.dir={x:0,y:0};
-      }
-    }
+    if (!canMove(e.x,e.y,e.dir.x,e.dir.y)) e.dir = {x:0,y:0};
     e.sub += e.speed;
     if (e.sub>=1){
       e.x += e.dir.x; e.y += e.dir.y; e.sub=0;
@@ -214,14 +236,32 @@
   }
 
   function stepPac(){
-    stepEntity(pac, canMovePac);
+    // turn su centro-tile
+    if (pac.sub<=0){
+      if (intent.x||intent.y){
+        if (canMovePac(pac.x,pac.y,intent.x,intent.y)){
+          pac.dir = {x:intent.x, y:intent.y};
+        }
+      }
+      if (!canMovePac(pac.x,pac.y,pac.dir.x,pac.dir.y)){
+        pac.dir = {x:0,y:0};
+      }
+    }
+    // muovi
+    pac.sub += pac.speed;
+    if (pac.sub>=1){
+      pac.x += pac.dir.x; pac.y += pac.dir.y; pac.sub=0;
+      const w = wrap(pac.x,pac.y);
+      pac.x=w.x; pac.y=w.y;
+    }
+    // eat
     const p = pelletAt(pac.x,pac.y);
     if (p && !p.eaten){
       p.eaten=true;
       S.score += p.power ? 50 : 10;
       if (p.power){
         ghosts.forEach(g=> g.frightened = 6 + (S.level-1));
-        toast('Power‑pill!');
+        toast('Power-pill!');
       }
       updateHUD();
       if (pellets.every(p=>p.eaten)){
@@ -242,7 +282,7 @@
       if (dirs.length===0) return {x:0,y:0};
       return dirs[Math.floor(Math.random()*dirs.length)];
     }
-    // choose direction reducing distance to pac
+    // greedy verso Pac (con variazioni)
     const dirs = [{x:1,y:0},{x:-1,y:0},{x:0, y:1},{x:0, y:-1}]
       .filter(d=> canMoveGhost(g.x,g.y,d.x,d.y) && !(d.x===-g.dir.x && d.y===-g.dir.y));
     if (dirs.length===0) return {x:0,y:0};
@@ -278,10 +318,12 @@
   // ===== Rendering =====
   let TILE = 20, offsetX=0, offsetY=0;
   function computeScale(){
-    // fit tiles
-    TILE = Math.min( Math.floor(cvs.clientWidth / W), Math.floor(cvs.clientHeight / H) );
+    TILE = Math.min(
+      Math.floor(cvs.clientWidth  / Math.max(1,W)),
+      Math.floor(cvs.clientHeight / Math.max(1,H))
+    );
     if (TILE<10) TILE=10;
-    offsetX = Math.floor((cvs.clientWidth - W*TILE)/2);
+    offsetX = Math.floor((cvs.clientWidth  - W*TILE)/2);
     offsetY = Math.floor((cvs.clientHeight - H*TILE)/2);
   }
 
@@ -293,7 +335,7 @@
         const ch = rows[y][x];
         const X = offsetX + x*TILE;
         const Y = offsetY + y*TILE;
-        if (ch===WALLCH || ch===EMPTYCH){
+        if (ch===WALLCH){               // <-- SOLO # sono muri
           ctx.fillStyle = '#0b2b99';
           ctx.fillRect(X, Y, TILE, TILE);
           ctx.fillStyle = '#133bbb';
@@ -370,7 +412,6 @@
           toast('Ghost! +200');
           updateHUD();
         }else{
-          // lose life
           S.lives--;
           updateHUD();
           if (S.lives<=0){
@@ -394,7 +435,6 @@
       collide();
       anim++;
     }
-    // draw
     computeScale();
     fitHiDPI();
     drawMaze();
@@ -405,7 +445,7 @@
 
   // ===== Boot =====
   (async function init(){
-    await loadMaze();
+    try { await loadMaze(); } catch(e){ console.error(e); }
     updateHUD();
     resetPositions();
     requestAnimationFrame(tick);
