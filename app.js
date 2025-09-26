@@ -194,11 +194,17 @@
   }
 
   function stepEntity(e, canMove){
-    // Turn if possible at tile
-    if (e.sub<=0){
-      if (intent.x||intent.y){
-        if (canMove(e.x,e.y,intent.x,intent.y)){
-          e.dir={x:intent.x,y:intent.y};
+    // Move forward, do not use player intent here.
+    if (!canMove(e.x,e.y,e.dir.x,e.dir.y)){
+      e.dir = {x:0,y:0};
+    }
+    e.sub += e.speed;
+    if (e.sub>=1){
+      e.x += e.dir.x; e.y += e.dir.y; e.sub=0;
+      const w = wrap(e.x,e.y);
+      e.x=w.x; e.y=w.y;
+    }
+  };
         }
       }
       if (!canMove(e.x,e.y,e.dir.x,e.dir.y)){
@@ -214,15 +220,44 @@
   }
 
   function stepPac(){
-    stepEntity(pac, canMovePac);
+    // Turn on tile center if possible
+    if (pac.sub<=0){
+      if (intent.x||intent.y){
+        if (canMovePac(pac.x,pac.y,intent.x,intent.y)){
+          pac.dir = {x:intent.x, y:intent.y};
+        }
+      }
+      if (!canMovePac(pac.x,pac.y,pac.dir.x,pac.dir.y)){
+        pac.dir = {x:0,y:0};
+      }
+    }
+    // Move
+    pac.sub += pac.speed;
+    if (pac.sub>=1){
+      pac.x += pac.dir.x; pac.y += pac.dir.y; pac.sub=0;
+      const w = wrap(pac.x,pac.y);
+      pac.x=w.x; pac.y=w.y;
+    }
+    // Eat
     const p = pelletAt(pac.x,pac.y);
     if (p && !p.eaten){
       p.eaten=true;
-      S.score += p.power ? 50 : 10;
+      const add = p.power ? 50 : 10;
+      S.score += add;
       if (p.power){
         ghosts.forEach(g=> g.frightened = 6 + (S.level-1));
-        toast('Power‑pill!');
+        toast('Power-pill!');
       }
+      updateHUD();
+      if (pellets.every(p=>p.eaten)){
+        S.level++;
+        pellets.forEach(p=> p.eaten=false);
+        resetPositions();
+        toast(`Livello ${S.level}`);
+        updateHUD();
+      }
+    }
+  }
       updateHUD();
       if (pellets.every(p=>p.eaten)){
         S.level++;
@@ -271,6 +306,9 @@
       const nd = ghostDir(g);
       if (nd.x||nd.y) g.dir=nd;
     }
+    stepEntity(g, canMoveGhost);
+    if (g.frightened>0) g.frightened -= 0.02;
+  }
     stepEntity(g, canMoveGhost);
     if (g.frightened>0) g.frightened -= 0.02;
   }
@@ -361,12 +399,27 @@
 
   function collide(){
     for (const g of ghosts){
-      const gx = g.x + (g.sub>0.5? g.dir.x:0);
-      const gy = g.y + (g.sub>0.5? g.dir.y:0);
-      if (Math.abs(gx - pac.x) + Math.abs(gy - pac.y) <= 0){
+      if (g.x===pac.x && g.y===pac.y){
         if (g.frightened>0){
           S.score += 200;
           g.x=g.spawnX; g.y=g.spawnY; g.frightened=0; g.sub=0; g.dir={x:0,y:0};
+          toast('Ghost! +200');
+          updateHUD();
+        }else{
+          S.lives--;
+          updateHUD();
+          if (S.lives<=0){
+            S.over=true; S.paused=true;
+            toast('Game Over', 2000);
+          }else{
+            toast('Oops! -1 vita', 1000);
+            resetPositions();
+          }
+        }
+        break;
+      }
+    }
+  };
           toast('Ghost! +200');
           updateHUD();
         }else{
