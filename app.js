@@ -43,22 +43,67 @@
   function k(x,y){ return `${x},${y}`; }
 
   async function loadMaze(){
-    const txt = await fetch('maze.txt').then(r=>r.text());
-    rows = txt.replace(/\r/g,'').split('\n').filter(Boolean);
-    // normalize width
+    let txt = '';
+    try {
+      const r = await fetch('maze.txt', { cache: 'no-store' });
+      if (!r.ok) throw new Error('maze.txt HTTP ' + r.status);
+      txt = await r.text();
+    } catch (e) {
+      console.warn('maze.txt load failed, using DEFAULT_MAZE', e);
+      txt = `############################
+#............##............#
+#.####.#####.##.#####.####.#
+#X####.#####.##.#####.####X#
+#..........................#
+#.####.##.########.##.####.#
+#......##....##....##......#
+######.##### ## #####.######
+     #.##          ##.#
+     #.## ###--### ##.#
+######.## # GGGG # ##.######
+      .   # GGGG #   .      
+######.## # GGGG # ##.######
+     #.## ######## ##.#
+     #.##    P     ##.#     
+######.## ######## ##.######
+#............##............#
+#.####.#####.##.#####.####.#
+#X..##................##..X#
+###.##.##.########.##.##.###
+#......##....##....##......#
+#.##########.##.##########.#
+#..........................#
+############################
+`;
+      toast('Maze fallback', 1200);
+    }
+    rows = txt.replace(//g,'').split('
+').filter(line=>line.length>0);
     W = Math.max(...rows.map(r=>r.length));
     rows = rows.map(r=> r.padEnd(W, ' '));
     H = rows.length;
 
-    // scan
     pellets = [];
     gates = new Set();
     tunnels = new Set();
     ghostStarts = [];
-    for (let y=0;y<H;y++){
-      for (let x=0;x<W;x++){
-        const c = rows[y][x];
-        if (c===PAC){ pacStart={x,y}; }
+    pacStart = {x:1,y:1};
+
+    for (let y=0;y<H;y++){ for (let x=0;x<W;x++){ const c = rows[y][x];
+      if (c===PAC){ pacStart={x,y}; }
+      else if (c===GHOST){ ghostStarts.push({x,y}); }
+      else if (c==='.'){ pellets.push({x,y,power:false,eaten:false}); }
+      else if (c==='o'){ pellets.push({x,y,power:true,eaten:false}); }
+      else if (c==='-'){ gates.add(k(x,y)); }
+      else if (c==='X'){ tunnels.add(k(x,y)); }
+    }}
+
+    if (ghostStarts.length===0){ ghostStarts.push({x: pacStart.x, y: pacStart.y-2}); }
+    if (!pellets.some(p=>p.power)){ // ensure at least four power-pellet candidates
+      const corners = [{x:1,y:1},{x:W-2,y:1},{x:1,y:H-2},{x:W-2,y:H-2}];
+      for (const c of corners){ const p = pellets.find(p=>p.x===c.x && p.y===c.y); if (p) p.power=true; }
+    }
+  }; }
         else if (c===GHOST){ ghostStarts.push({x,y}); }
         else if (c===DOT){ pellets.push({x,y,power:false,eaten:false}); }
         else if (c===POWER){ pellets.push({x,y,power:true,eaten:false}); }
@@ -447,12 +492,16 @@
       collide();
       anim++;
     }
-    // draw
     computeScale();
     fitHiDPI();
     drawMaze();
     drawPac();
     for (const g of ghosts) drawGhost(g);
+    if (W===0 || H===0){
+      ctx.fillStyle = '#f55';
+      ctx.font = '16px system-ui';
+      ctx.fillText('Maze non caricato (W/H=0). Controlla maze.txt.', 10, 24);
+    }
     requestAnimationFrame(tick);
   }
 
