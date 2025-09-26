@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <title>Pac-Man — pezzaliAPP</title>
+  <meta name="description" content="Pac‑Man (1980) PWA: labirinto classico da maze.txt, IA semplice dei fantasmi, power‑pill, punteggi. Offline‑ready.">
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/pacman-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root{
+      --bg:#0b0b0b; --ink:#f0f0f0; --wall:#0b2b99; --wall2:#133bbb; --pellet:#ffd; --pp:#9df; --hud:#151515; --btn:#1b1b1b;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial}
+    header{padding:10px 14px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #111; background:linear-gradient(180deg,#0e0e0e,#0a0a0a)}
+    header img{width:28px;height:28px}
+    header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+    #hud{display:flex; gap:12px; align-items:center; margin-left:auto}
+    .chip{background:var(--hud); padding:6px 10px; border-radius:999px; font-size:13px; border:1px solid #121212}
+    #wrap{display:flex; flex-direction:column; align-items:center; gap:8px; padding:8px;}
+    #gamePanel{width:100%; max-width:920px; aspect-ratio: 28 / 31; background:#000; border:1px solid #111; border-radius:12px; position:relative; overflow:hidden;}
+    canvas{width:100%; height:100%; display:block;}
+    #controls{display:grid; grid-template-columns:1fr; gap:8px; width:100%; max-width:920px;}
+    .row{display:flex; gap:8px}
+    button{flex:1; background:var(--btn); color:var(--ink); padding:12px 14px; border-radius:12px; border:1px solid #111; font-weight:600; letter-spacing:.3px}
+    button:active{transform:translateY(1px)}
+    #dpad{position:absolute; inset:auto 0 8px 0; display:flex; justify-content:center; pointer-events:none;}
+    .pad{pointer-events:auto; width:min(320px,60%); height:120px; display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr 1fr; gap:8px}
+    .pad button{min-height:36px}
+    .pad .empty{background:transparent; border:none}
+    footer{padding:10px; text-align:center; color:#888; font-size:12px}
+    .toast{position:fixed; left:50%; transform:translateX(-50%); bottom:16px; background:#121212; border:1px solid #1f1f1f; padding:8px 12px; border-radius:10px; font-size:13px; display:none}
+    .badge{display:inline-flex; align-items:center; gap:6px; background:#0e0e0e; border:1px solid #1c1c1c; padding:6px 10px; border-radius:999px; font-size:12px}
+    .legend{font-size:12px; color:#9a9a9a; text-align:center}
+    @media (min-width: 840px){ #controls{grid-template-columns:1fr 1fr} }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/pacman-192.png" alt="Pac‑Man">
+    <h1>Pac‑Man — pezzaliAPP</h1>
+    <div id="hud">
+      <div class="chip">💛 Score: <span id="score">0</span></div>
+      <div class="chip">🟡 Lives: <span id="lives">3</span></div>
+      <div class="chip">🎯 Level: <span id="level">1</span></div>
+    </div>
+  </header>
+
+  <div id="wrap">
+    <div id="gamePanel">
+      <canvas id="game" width="560" height="620" aria-label="Pac‑Man"></canvas>
+      <div id="dpad">
+        <div class="pad">
+          <div class="empty"></div>
+          <button id="btnUp" aria-label="Su">▲</button>
+          <div class="empty"></div>
+          <button id="btnLeft" aria-label="Sinistra">◀</button>
+          <div class="empty"></div>
+          <button id="btnRight" aria-label="Destra">▶</button>
+          <div class="empty"></div>
+          <button id="btnDown" aria-label="Giù">▼</button>
+          <div class="empty"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div class="row">
+        <button id="btnPlayPause">⏸ Pausa</button>
+        <button id="btnRestart">⟲ Restart</button>
+      </div>
+      <div class="row">
+        <span class="badge">⌨️ Frecce/WSAD • 📱 D‑Pad</span>
+        <span class="badge">🍒 Power‑pill = fantasmi spaventati</span>
+      </div>
+      <p class="legend">© 2025 Pac‑Man — Una PWA di pezzaliAPP.com • MIT</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+  </script>
+</body>
+</html>
